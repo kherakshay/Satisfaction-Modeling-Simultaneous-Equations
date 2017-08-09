@@ -1,0 +1,317 @@
+﻿proc sql;
+ select count (distinct OID_CLIENT_DIM) as client_cnt from ak.survey_data;
+quit;
+
+proc sql;
+ select count (distinct OID_CLIENT_DIM) as client_cnt from ak.trans_data2;
+quit;
+
+proc sort data = ak.survey_data nodupkey out = temp;
+by OID_CLIENT_DIM;
+run;
+
+proc means data = ak.survey_data min max n nmiss;
+run;
+
+likely return 0
+kept informed 0
+pet care 0
+
+proc freq data = ak.survey_data;
+tables LIKELY_RETURN
+KEPT_INFORMED
+PET_CARE;
+run;
+
+data survey_data (drop = COMPLETE_SASDATE);
+ set ak.survey_data;
+if OVERALL_SAT = . then delete;
+if LIKELY_RECOMMEND = . then delete;
+if LIKELY_RETURN = . then delete;
+if HOSPITAL_ATMOSPHERE = . then delete;
+if STAFF_FRIENDLY = . then delete;
+if STAFF_PREPARED = . then delete;
+if KEPT_INFORMED = . then delete;
+if VET_KNOWLEDGE = . then delete;
+if VET_COMMUNICATE = . then delete;
+if PET_CARE = . then delete;
+if CARING_AT_HOME = . then delete;
+if LIKELY_RETURN = 0 then delete;
+if KEPT_INFORMED = 0 then delete;
+if PET_CARE = 0 then delete;
+run;
+
+proc contents data = ak.Trans_data2;
+run;
+
+proc sort data = ak.Trans_data2 nodupkey out = trans_data;
+by CLINIC_EXT_ID
+OID_CLIENT_DIM
+avg_days_between
+year1_Dental_net_rev
+year1_Dental_units
+year1_Exam_net_rev
+year1_Exam_units
+year1_Food_net_rev
+year1_Food_units
+year1_Grooming_net_rev
+year1_Grooming_units
+year1_Hospitalized_net_rev
+year1_Hospitalized_units
+year1_Laboratory_net_rev
+year1_Laboratory_units
+year1_Other_net_rev
+year1_Other_units
+year1_Parasite_net_rev
+year1_Parasite_units
+year1_Prescription_net_rev
+year1_Prescription_units
+year1_Radiology_net_rev
+year1_Radiology_units
+year1_Retail_net_rev
+year1_Retail_units
+year1_Surgery_net_rev
+year1_Surgery_units
+year1_Vaccination_net_rev
+year1_Vaccination_units
+year1_boarding_net_rev
+year1_boarding_units
+year1_num_invoices
+year1_tot_net_rev
+year1_tot_units
+year2_Dental_net_rev
+year2_Dental_units
+year2_Exam_net_rev
+year2_Exam_units
+year2_Food_net_rev
+year2_Food_units
+year2_Grooming_net_rev
+year2_Grooming_units
+year2_Hospitalized_net_rev
+year2_Hospitalized_units
+year2_Laboratory_net_rev
+year2_Laboratory_units
+year2_Other_net_rev
+year2_Other_units
+year2_Parasite_net_rev
+year2_Parasite_units
+year2_Prescription_net_rev
+year2_Prescription_units
+year2_Radiology_net_rev
+year2_Radiology_units
+year2_Retail_net_rev
+year2_Retail_units
+year2_Surgery_net_rev
+year2_Surgery_units
+year2_Vaccination_net_rev
+year2_Vaccination_units
+year2_boarding_net_rev
+year2_boarding_units
+year2_num_invoices
+year2_tot_net_rev
+year2_tot_units;
+run;
+
+proc means data = trans_data min max n nmiss;
+run;
+
+data trans_data (drop = CLINIC_EXT_ID);
+ set trans_data;
+if year1_tot_net_rev = . then delete;
+run;
+
+proc univariate data = trans_data;
+var avg_days_between
+year1_num_invoices
+year1_tot_net_rev
+year1_tot_units
+year2_num_invoices
+year2_tot_net_rev
+year2_tot_units;
+run;
+
+data trans_data;
+ set trans_data;
+if avg_days_between le 0 then delete;
+if avg_days_between gt 367 then delete;
+
+if year1_num_invoices gt 39 then delete;
+
+if year1_tot_net_rev lt 0 then delete;
+if year1_tot_net_rev gt 6274 then delete;
+
+if year1_tot_units lt 0 then delete;
+if year1_tot_units gt 1160 then delete;
+
+if year2_num_invoices gt 40 then delete;
+
+if year2_tot_net_rev lt 0 then delete;
+if year2_tot_net_rev gt 6272 then delete;
+
+if year2_tot_units lt 0 then delete;
+if year2_tot_units gt 1112 then delete;
+
+num_invoices = sum (year1_num_invoices, year2_num_invoices);
+tot_net_rev = sum (year1_tot_net_rev, year2_tot_net_rev);
+tot_units = sum (year1_tot_units, year2_tot_units);
+price = tot_net_rev/tot_units;
+run;
+
+/*** Merging the 2 datasets ***/
+
+proc sort data = survey_data nodupkey;
+by OID_CLIENT_DIM;
+run;
+
+proc sort data = trans_data nodupkey;
+by OID_CLIENT_DIM;
+run;
+
+data ak1.trans_survey;
+merge survey_data (in=a) trans_data (in=b);
+by OID_CLIENT_DIM;
+if a and b;
+run;
+
+proc standard data = ak1.trans_survey mean=0 std=1 out=standard;
+var 
+avg_days_between
+num_invoices
+tot_net_rev
+tot_units
+price
+OVERALL_SAT 
+LIKELY_RECOMMEND 
+LIKELY_RETURN 
+HOSPITAL_ATMOSPHERE 
+STAFF_FRIENDLY 
+STAFF_PREPARED 
+KEPT_INFORMED 
+VET_KNOWLEDGE 
+VET_COMMUNICATE 
+PET_CARE 
+CARING_AT_HOME 
+COST_NEXT_VISIT 
+PET_NEXT_VISIT 
+CHECKOUT_PROCESS 
+PAYMENT_OPTIONS 
+FAIR_PRICES 
+;
+run;
+
+data cluster_map;
+ set cluster_map (keep = OID_CLIENT_DIM cluster);
+run;
+
+proc sort data = ak1.trans_survey nodupkey;
+by OID_CLIENT_DIM;
+run;
+
+proc sort data = cluster_map nodupkey;
+by OID_CLIENT_DIM;
+run;
+
+data ak1.trans_survey;
+merge ak1.trans_survey (in=a) cluster_map (in=b);
+by OID_CLIENT_DIM;
+if a and b;
+run;
+
+/*** Simultaneous Equations Modeling ***/
+/** Model 1 **/
+
+proc syslin data = ak1.trans_survey 2sls;
+   endogenous  OVERALL_SAT;
+   instruments LIKELY_RECOMMEND LIKELY_RETURN HOSPITAL_ATMOSPHERE STAFF_FRIENDLY STAFF_PREPARED KEPT_INFORMED 
+               VET_KNOWLEDGE VET_COMMUNICATE PET_CARE CARING_AT_HOME COST_NEXT_VISIT PET_NEXT_VISIT CHECKOUT_PROCESS PAYMENT_OPTIONS 
+               FAIR_PRICES price avg_days_between num_invoices;
+   model OVERALL_SAT = LIKELY_RECOMMEND KEPT_INFORMED 
+          PET_NEXT_VISIT CHECKOUT_PROCESS 
+         FAIR_PRICES;
+   model tot_units = OVERALL_SAT price avg_days_between num_invoices;
+where cluster = 1;
+run;
+
+dropped
+PET_CARE
+CARING_AT_HOME
+VET_COMMUNICATE
+VET_KNOWLEDGE
+STAFF_PREPARED
+STAFF_FRIENDLY
+HOSPITAL_ATMOSPHERE
+LIKELY_RETURN
+PAYMENT_OPTIONS
+COST_NEXT_VISIT
+
+try 3sls
+
+/** Model 2 **/
+
+proc syslin data = ak1.trans_survey 2sls;
+   endogenous  OVERALL_SAT;
+   instruments LIKELY_RECOMMEND LIKELY_RETURN HOSPITAL_ATMOSPHERE STAFF_FRIENDLY STAFF_PREPARED KEPT_INFORMED 
+               VET_KNOWLEDGE VET_COMMUNICATE PET_CARE CARING_AT_HOME COST_NEXT_VISIT PET_NEXT_VISIT CHECKOUT_PROCESS PAYMENT_OPTIONS 
+               FAIR_PRICES price avg_days_between num_invoices;
+   model OVERALL_SAT = LIKELY_RECOMMEND KEPT_INFORMED PET_NEXT_VISIT FAIR_PRICES CARING_AT_HOME 
+                       VET_KNOWLEDGE STAFF_PREPARED HOSPITAL_ATMOSPHERE LIKELY_RETURN
+                       PAYMENT_OPTIONS;
+   model tot_units = OVERALL_SAT price avg_days_between num_invoices;
+where cluster = 2;
+run;
+
+dropped
+VET_COMMUNICATE
+PET_CARE
+CHECKOUT_PROCESS
+STAFF_FRIENDLY
+COST_NEXT_VISIT
+
+/** Model 3 **/
+
+proc syslin data = ak1.trans_survey 2sls;
+   endogenous  OVERALL_SAT;
+   instruments LIKELY_RECOMMEND LIKELY_RETURN HOSPITAL_ATMOSPHERE STAFF_FRIENDLY STAFF_PREPARED KEPT_INFORMED 
+               VET_KNOWLEDGE VET_COMMUNICATE PET_CARE CARING_AT_HOME COST_NEXT_VISIT PET_NEXT_VISIT CHECKOUT_PROCESS PAYMENT_OPTIONS 
+               FAIR_PRICES price avg_days_between num_invoices;
+   model OVERALL_SAT = LIKELY_RECOMMEND KEPT_INFORMED FAIR_PRICES 
+                       VET_KNOWLEDGE STAFF_PREPARED HOSPITAL_ATMOSPHERE LIKELY_RETURN
+                       PAYMENT_OPTIONS VET_COMMUNICATE PET_CARE STAFF_FRIENDLY COST_NEXT_VISIT;
+   model tot_units = OVERALL_SAT price avg_days_between num_invoices;
+where cluster = 3;
+run;
+
+dropped
+PET_NEXT_VISIT
+CARING_AT_HOME
+CHECKOUT_PROCESS
+
+proc sort data = ak1.trans_survey;
+by cluster;
+run;
+
+proc means data = ak1.trans_survey;
+*by cluster;
+var avg_days_between
+num_invoices
+tot_net_rev
+tot_units
+price
+OVERALL_SAT 
+LIKELY_RECOMMEND 
+LIKELY_RETURN 
+HOSPITAL_ATMOSPHERE 
+STAFF_FRIENDLY 
+STAFF_PREPARED 
+KEPT_INFORMED 
+VET_KNOWLEDGE 
+VET_COMMUNICATE 
+PET_CARE 
+CARING_AT_HOME 
+COST_NEXT_VISIT 
+PET_NEXT_VISIT 
+CHECKOUT_PROCESS 
+PAYMENT_OPTIONS 
+FAIR_PRICES 
+;
+run;
